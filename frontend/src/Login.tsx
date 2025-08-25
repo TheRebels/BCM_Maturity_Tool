@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from './auth'
+import { useAuth } from './auth-context'
 
 const Login: React.FC = () => {
 	const { login } = useAuth()
@@ -9,12 +9,12 @@ const Login: React.FC = () => {
 	const [password, setPassword] = useState('admin123')
 	const [error, setError] = useState<string | null>(null)
 
-	const onSubmit = async (e: React.FormEvent) => {
+	const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault()
 		try {
 			await login(username, password)
 			nav('/')
-		} catch (err: any) {
+		} catch {
 			setError('Login failed')
 		}
 	}
