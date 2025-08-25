@@ -13,12 +13,29 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
+type AssessmentItem = {
+	id: number
+	title: string
+	status: string
+	overall_score?: number | null
+}
+
+type QuestionItem = { id: number; text: string }
+
+type ResponseItem = { id?: number; question: number; rating: number | null; comment: string }
+
+type ApiList<T> = T[] | { results: T[] }
+
+function toList<T>(data: ApiList<T>): T[] {
+	return Array.isArray(data) ? data : data.results
+}
+
 export const Home: React.FC = () => <div>Welcome to BCM-MAP</div>
 
 export const Assessments: React.FC = () => {
-	const [items, setItems] = useState<any[]>([])
+	const [items, setItems] = useState<AssessmentItem[]>([])
 	useEffect(() => {
-		api.get('/assessments/').then(r => setItems(r.data.results || r.data))
+		api.get<ApiList<AssessmentItem>>('/assessments/').then(r => setItems(toList(r.data)))
 	}, [])
 	return (
 		<div>
@@ -33,17 +50,17 @@ export const Assessments: React.FC = () => {
 }
 
 export const Dashboard: React.FC = () => {
-	const [items, setItems] = useState<any[]>([])
+	const [items, setItems] = useState<AssessmentItem[]>([])
 	useEffect(() => {
-		api.get('/assessments/').then(r => setItems(r.data.results || r.data))
+		api.get<ApiList<AssessmentItem>>('/assessments/').then(r => setItems(toList(r.data)))
 	}, [])
-	const labels = items.map((it: any) => it.title)
+	const labels = items.map(it => it.title)
 	const data = {
 		labels,
 		datasets: [
 			{
 				label: 'Overall Score',
-				data: items.map((it: any) => it.overall_score ?? 0),
+				data: items.map(it => it.overall_score ?? 0),
 				backgroundColor: 'rgba(53, 162, 235, 0.5)',
 			},
 		],
@@ -57,22 +74,22 @@ export const Dashboard: React.FC = () => {
 }
 
 export const AssessmentForm: React.FC<{ assessmentId: number }> = ({ assessmentId }) => {
-	const [responses, setResponses] = useState<any[]>([])
-	const [questions, setQuestions] = useState<any[]>([])
+	const [responses, setResponses] = useState<ResponseItem[]>([])
+	const [questions, setQuestions] = useState<QuestionItem[]>([])
 	useEffect(() => {
 		Promise.all([
-			api.get('/questions/').then(r => setQuestions(r.data.results || r.data)),
-			api.get(`/responses/?assessment=${assessmentId}`).then(r => setResponses(r.data.results || r.data)),
+			api.get<ApiList<QuestionItem>>('/questions/').then(r => setQuestions(toList(r.data))),
+			api.get<ApiList<ResponseItem>>(`/responses/?assessment=${assessmentId}`).then(r => setResponses(toList(r.data))),
 		])
 	}, [assessmentId])
 
 	const upsertResponse = async (questionId: number, rating: number, comment: string) => {
-		let existing = responses.find(r => r.question === questionId)
+		const existing = responses.find(r => r.question === questionId)
 		if (existing) {
-			const res = await api.patch(`/responses/${existing.id}/`, { rating, comment })
+			const res = await api.patch<ResponseItem>(`/responses/${existing.id}/`, { rating, comment })
 			setResponses(rs => rs.map(r => (r.id === existing.id ? res.data : r)))
 		} else {
-			const res = await api.post('/responses/', { assessment: assessmentId, question: questionId, rating, comment })
+			const res = await api.post<ResponseItem>('/responses/', { assessment: assessmentId, question: questionId, rating, comment })
 			setResponses(rs => [...rs, res.data])
 		}
 	}
@@ -97,7 +114,7 @@ export const AssessmentForm: React.FC<{ assessmentId: number }> = ({ assessmentI
 
 	return (
 		<div>
-			{questions.map((q: any) => {
+			{questions.map((q) => {
 				const resp = responses.find(r => r.question === q.id)
 				return (
 					<div key={q.id} style={{ marginBottom: 16 }}>
@@ -108,7 +125,7 @@ export const AssessmentForm: React.FC<{ assessmentId: number }> = ({ assessmentI
 							onChange={e => upsertResponse(q.id, resp?.rating ?? 0, e.target.value)} />
 						{resp && (
 							<input type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-								onChange={e => e.target.files && uploadEvidence(resp.id, e.target.files[0])} />
+								onChange={e => e.target.files && uploadEvidence(resp.id as number, e.target.files[0])} />
 						)}
 					</div>
 				)
