@@ -77,6 +77,17 @@ export const AssessmentForm: React.FC<{ assessmentId: number }> = ({ assessmentI
 		}
 	}
 
+	useEffect(() => {
+		const id = setInterval(async () => {
+			for (const r of responses) {
+				if (r.id) {
+					await api.patch(`/responses/${r.id}/`, { rating: r.rating, comment: r.comment })
+				}
+			}
+		}, 30000)
+		return () => clearInterval(id)
+	}, [responses])
+
 	const uploadEvidence = async (responseId: number, file: File) => {
 		const form = new FormData()
 		form.append('response', String(responseId))

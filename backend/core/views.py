@@ -11,8 +11,10 @@ from .serializers import (
 	DepartmentSerializer, DomainSerializer, QuestionSerializer,
 	AssessmentSerializer, ResponseSerializer, EvidenceSerializer
 )
-from .permissions import IsCoordinatorOrAdmin, ReadOnly
+from .permissions import IsCoordinatorOrAdmin, ReadOnly, DepartmentScopedQuerysetMixin
 import csv
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
 
 # Create your views here.
@@ -36,13 +38,13 @@ class QuestionViewSet(viewsets.ModelViewSet):
 	permission_classes = [IsAuthenticated]
 
 
-class AssessmentViewSet(viewsets.ModelViewSet):
+class AssessmentViewSet(DepartmentScopedQuerysetMixin, viewsets.ModelViewSet):
 	queryset = Assessment.objects.select_related('department', 'owner').all()
 	serializer_class = AssessmentSerializer
 	permission_classes = [IsAuthenticated]
 
 
-class ResponseViewSet(viewsets.ModelViewSet):
+class ResponseViewSet(DepartmentScopedQuerysetMixin, viewsets.ModelViewSet):
 	queryset = AssessmentResponse.objects.select_related('assessment', 'question').all()
 	serializer_class = ResponseSerializer
 	permission_classes = [IsAuthenticated]
@@ -62,7 +64,7 @@ class ResponseViewSet(viewsets.ModelViewSet):
 			raise ValueError("Rating must be between 0 and 5")
 
 
-class EvidenceViewSet(viewsets.ModelViewSet):
+class EvidenceViewSet(DepartmentScopedQuerysetMixin, viewsets.ModelViewSet):
 	queryset = Evidence.objects.select_related('response').all()
 	serializer_class = EvidenceSerializer
 	permission_classes = [IsAuthenticated]
@@ -89,7 +91,7 @@ def export_assessments_csv(request):
 	response["Content-Disposition"] = 'attachment; filename="assessments.csv"'
 	writer = csv.writer(response)
 	writer.writerow(["Title", "Department", "Status", "Overall Score"]) 
-	for a in Assessment.objects.all():
+	for a in AssessmentViewSet().get_queryset():
 		serializer = AssessmentSerializer(a, context={"request": request})
 		writer.writerow([a.title, a.department.name, a.status, serializer.data.get("overall_score")])
 	return response
@@ -100,7 +102,25 @@ def export_assessments_csv(request):
 def export_assessments_pdf(request):
 	# Minimal stub PDF using plain text response; replace with real PDF lib later
 	content = "BCM-MAP Assessments\n\n"
-	for a in Assessment.objects.all():
+	for a in AssessmentViewSet().get_queryset():
 		serializer = AssessmentSerializer(a, context={"request": request})
 		content += f"- {a.title} | {a.department.name} | {a.status} | score: {serializer.data.get('overall_score')}\n"
 	return HttpResponse(content, content_type='application/pdf')
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def export_assessments_excel(request):
+	wb = Workbook()
+	ws = wb.active
+	ws.title = 'Assessments'
+	ws.append(["Title", "Department", "Status", "Overall Score"])
+	for a in AssessmentViewSet().get_queryset():
+		serializer = AssessmentSerializer(a, context={"request": request})
+		ws.append([a.title, a.department.name, a.status, serializer.data.get('overall_score')])
+	for col in range(1, 5):
+		ws.column_dimensions[get_column_letter(col)].width = 24
+	response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+	response['Content-Disposition'] = 'attachment; filename="assessments.xlsx"'
+	wb.save(response)
+	return response
